@@ -15,7 +15,7 @@ export function AppHeader({ onSettingsClick }: AppHeaderProps) {
         <div className="flex items-center justify-center flex-grow">
           <BrainCircuit className="h-10 w-10 sm:h-12 sm:w-12 text-primary" />
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-primary ml-3">
-            Actionable Insights
+            YT Video to Action
           </h1>
         </div>
         <Button 

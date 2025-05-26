@@ -625,7 +625,7 @@ export default function ActionableInsightsPage() {
         )}
       </main>
       <footer className="mt-12 text-center text-sm text-muted-foreground">
-        <p>&copy; {new Date().getFullYear()} Actionable Insights. All rights reserved.</p>
+        <p>&copy; {new Date().getFullYear()} YT Video to Action. All rights reserved.</p>
         <p>Powered by Genkit and Next.js.</p>
       </footer>
     </div>

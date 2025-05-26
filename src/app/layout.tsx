@@ -8,7 +8,7 @@ const geistSans = GeistSans;
 const geistMono = GeistMono;
 
 export const metadata: Metadata = {
-  title: 'Actionable Insights',
+  title: 'YT Video to Action',
   description: 'Generate summaries, action items, and plans from YouTube videos.',
 };
 
