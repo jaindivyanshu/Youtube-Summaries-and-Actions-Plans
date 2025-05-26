@@ -252,7 +252,7 @@ export default function ActionableInsightsPage() {
               )}
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-60 w-full rounded-md border p-4 bg-muted/30">
+              <ScrollArea className="h-72 w-full rounded-md border p-4 bg-muted/30"> {/* Increased height */}
                 {loadingStates.analysis && !analyzedTranscriptionOutput ? (
                     <LoadingSpinner message="Analyzing for highlights..." />
                 ) : (
@@ -327,7 +327,7 @@ export default function ActionableInsightsPage() {
                         </div>
                       </CardHeader>
                       <CardContent className="p-3 pt-0">
-                        <ScrollArea className="h-32 w-full rounded-md border p-3 bg-muted/20">
+                        <ScrollArea className="h-40 w-full rounded-md border p-3 bg-muted/20"> {/* Increased height */}
                           <p className="text-sm whitespace-pre-wrap break-words">{summary}</p>
                         </ScrollArea>
                         <p className="text-xs text-muted-foreground mt-2">Word count: {countWords(summary)}</p>
@@ -373,7 +373,7 @@ export default function ActionableInsightsPage() {
                         </div>
                       </CardHeader>
                       <CardContent className="p-3 pt-0">
-                        <ScrollArea className="h-32 w-full rounded-md border p-3 bg-muted/20">
+                        <ScrollArea className="h-40 w-full rounded-md border p-3 bg-muted/20"> {/* Increased height */}
                           {actionItems.length > 0 ? (
                             <ul className="list-disc pl-5 space-y-1">
                               {actionItems.map((item, index) => (
@@ -418,7 +418,7 @@ export default function ActionableInsightsPage() {
                         </div>
                       </CardHeader>
                       <CardContent className="p-3 pt-0">
-                        <ScrollArea className="h-48 w-full rounded-md border p-3 bg-muted/20">
+                        <ScrollArea className="h-60 w-full rounded-md border p-3 bg-muted/20"> {/* Increased height */}
                           <p className="text-sm whitespace-pre-wrap break-words">{actionablePlan}</p>
                         </ScrollArea>
                         <p className="text-xs text-muted-foreground mt-2">Word count: {countWords(actionablePlan)}</p>
