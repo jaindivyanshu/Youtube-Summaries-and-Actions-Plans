@@ -1,12 +1,13 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { AppHeader } from '@/components/actionable-insights/AppHeader';
 import { YoutubeUrlForm } from '@/components/actionable-insights/YoutubeUrlForm';
 import { LoadingSpinner } from '@/components/actionable-insights/LoadingSpinner';
 import { CopyToClipboardButton } from '@/components/actionable-insights/CopyToClipboardButton';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -20,18 +21,22 @@ import {
   handleExtractActionItems,
   handleCreateActionablePlan,
   handleAnalyzeTranscription,
+  handleTranscribeUploadedAudio,
 } from './actions';
 import type { TranscribeYouTubeVideoOutput } from '@/ai/flows/transcribe-youtube-video';
 import type { GenerateVideoSummaryOutput } from '@/ai/flows/generate-video-summary';
 import type { ExtractActionableItemsOutput } from '@/ai/flows/extract-actionable-items';
 import type { ConvertToPlanOutput } from '@/ai/flows/convert-to-actionable-plan';
 import type { AnalyzeTranscriptionOutput } from '@/ai/flows/analyze-transcription-flow';
-import { ClipboardList, FileText, ListChecks, Loader2, ScrollText, AlertCircle, Sparkles, MessageSquarePlus } from 'lucide-react';
+import type { TranscribeUploadedAudioOutput } from '@/ai/flows/transcribe-uploaded-audio-flow';
+
+import { ClipboardList, FileText, ListChecks, Loader2, ScrollText, AlertCircle, Sparkles, UploadCloud, FileAudio } from 'lucide-react';
 
 type YoutubeUrlFormValues = { youtubeUrl: string };
 
 interface LoadingStates {
-  transcribe: boolean;
+  transcribeVideo: boolean;
+  transcribeAudio: boolean;
   analysis: boolean;
   summary: boolean;
   actionItems: boolean;
@@ -39,12 +44,25 @@ interface LoadingStates {
 }
 
 interface ErrorMessages {
-  transcribe: string | null;
+  transcribeVideo: string | null;
+  transcribeAudio: string | null;
   analysis: string | null;
   summary: string | null;
   actionItems: string | null;
   actionablePlan: string | null;
 }
+
+// Known messages indicating no transcript was found or AI couldn't process from URL
+const NO_TRANSCRIPT_PATTERNS = [
+  /Transcription not available for video id:/i,
+  /Automated transcription for video ID \w+ is not yet implemented/i,
+  /AI speech-to-text transcription failed/i,
+  /Audio for video \w+ could not be downloaded/i,
+  /No pre-existing transcript found/i, // from transcribe-youtube-video if getTranscript is null & AI download fails
+  /Error: No pre-existing transcript found/i, // If getTranscript returns null and downloadAudioFromYouTube also returns null
+  /^Error:/i, // Generic error from handleTranscribeVideo
+  /^$/, // Empty string
+];
 
 export default function ActionableInsightsPage() {
   const [youtubeUrl, setYoutubeUrl] = useState<string>('');
@@ -57,8 +75,14 @@ export default function ActionableInsightsPage() {
   const [summaryInstruction, setSummaryInstruction] = useState<string>('');
   const [actionItemsInstruction, setActionItemsInstruction] = useState<string>('');
 
+  const [showAudioUpload, setShowAudioUpload] = useState<boolean>(false);
+  const [uploadedAudioFile, setUploadedAudioFile] = useState<File | null>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
+
+
   const [loadingStates, setLoadingStates] = useState<LoadingStates>({
-    transcribe: false,
+    transcribeVideo: false,
+    transcribeAudio: false,
     analysis: false,
     summary: false,
     actionItems: false,
@@ -66,7 +90,8 @@ export default function ActionableInsightsPage() {
   });
 
   const [errorMessages, setErrorMessages] = useState<ErrorMessages>({
-    transcribe: null,
+    transcribeVideo: null,
+    transcribeAudio: null,
     analysis: null,
     summary: null,
     actionItems: null,
@@ -84,6 +109,9 @@ export default function ActionableInsightsPage() {
     if (fullReset) {
       setTranscription(null);
       setYoutubeUrl('');
+      if (audioInputRef.current) {
+        audioInputRef.current.value = ''; // Clear file input
+      }
     }
     setAnalyzedTranscriptionOutput(null);
     setSummary(null);
@@ -91,49 +119,114 @@ export default function ActionableInsightsPage() {
     setActionablePlan(null);
     setSummaryInstruction('');
     setActionItemsInstruction('');
-    setErrorMessages({ transcribe: null, analysis: null, summary: null, actionItems: null, actionablePlan: null });
+    setShowAudioUpload(false);
+    setUploadedAudioFile(null);
+    setErrorMessages({ 
+      transcribeVideo: null, transcribeAudio: null, analysis: null, 
+      summary: null, actionItems: null, actionablePlan: null 
+    });
   };
 
   const processVideo = async (data: YoutubeUrlFormValues) => {
     resetResults();
     setYoutubeUrl(data.youtubeUrl);
-    setLoadingStates(prev => ({ ...prev, transcribe: true }));
-    setErrorMessages(prev => ({ ...prev, transcribe: null, analysis: null }));
+    setLoadingStates(prev => ({ ...prev, transcribeVideo: true }));
+    setErrorMessages(prev => ({ ...prev, transcribeVideo: null, transcribeAudio: null, analysis: null }));
 
     try {
       const transcribeResult: TranscribeYouTubeVideoOutput = await handleTranscribeVideo({ youtubeUrl: data.youtubeUrl });
-      setTranscription(transcribeResult.transcription);
       
-      const placeholderMessagePattern = /Transcription not available for video id: \w+|Automated transcription for video ID \w+ is not yet implemented/;
-      if (transcribeResult.transcription && placeholderMessagePattern.test(transcribeResult.transcription)) {
+      const isNoTranscript = !transcribeResult.transcription || NO_TRANSCRIPT_PATTERNS.some(pattern => pattern.test(transcribeResult.transcription || ''));
+
+      if (isNoTranscript) {
+        setTranscription(null); // Clear any placeholder/error message
+        setShowAudioUpload(true);
+        setErrorMessages(prev => ({ ...prev, transcribeVideo: transcribeResult.transcription || "No transcript found or error during processing. Try uploading an audio file." }));
         toast({
-          title: "Transcription Note",
-          description: "Automated transcription was not available or not yet implemented for this video.",
+          title: "No Automated Transcript",
+          description: "Could not fetch or generate a transcript from the YouTube URL. You can try uploading an audio file directly.",
           variant: "default",
           duration: 7000,
         });
-      } else if (transcribeResult.transcription) {
-        toast({ title: 'Transcription Successful', description: 'Transcription ready.' });
       } else {
-        throw new Error('Empty or invalid transcription received.');
+        setTranscription(transcribeResult.transcription);
+        setShowAudioUpload(false);
+        toast({ title: 'Transcription Successful', description: 'Transcription ready from YouTube URL.' });
       }
 
-    } catch (error: any) {
-      console.error("Transcription error:", error);
+    } catch (error: any) { // This catch is more for network/unexpected errors from handleTranscribeVideo itself
+      console.error("processVideo (URL) error:", error);
       const message = error.message || 'Failed to process video for transcription.';
-      setErrorMessages(prev => ({ ...prev, transcribe: message }));
-      toast({ variant: 'destructive', title: 'Transcription Failed', description: message });
-      setTranscription("Error during transcription.");
+      setErrorMessages(prev => ({ ...prev, transcribeVideo: message }));
+      toast({ variant: 'destructive', title: 'Video Processing Failed', description: message });
+      setTranscription(null); // Ensure transcription is null on hard failure
+      setShowAudioUpload(true); // Offer upload as fallback
     } finally {
-      setLoadingStates(prev => ({ ...prev, transcribe: false }));
+      setLoadingStates(prev => ({ ...prev, transcribeVideo: false }));
     }
   };
+  
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      // Basic validation for audio type could be added here if desired
+      // e.g. if (!file.type.startsWith('audio/')) { ... }
+      setUploadedAudioFile(file);
+      setErrorMessages(prev => ({ ...prev, transcribeAudio: null }));
+    } else {
+      setUploadedAudioFile(null);
+    }
+  };
+
+  const transcribeUploadedFile = async () => {
+    if (!uploadedAudioFile) {
+      setErrorMessages(prev => ({...prev, transcribeAudio: "Please select an audio file first."}));
+      return;
+    }
+    setLoadingStates(prev => ({ ...prev, transcribeAudio: true }));
+    setErrorMessages(prev => ({ ...prev, transcribeAudio: null }));
+    setTranscription(null); // Clear any previous transcription
+    setAnalyzedTranscriptionOutput(null); // Clear previous analysis
+
+    const reader = new FileReader();
+    reader.readAsDataURL(uploadedAudioFile);
+    reader.onloadend = async () => {
+      try {
+        const audioDataUri = reader.result as string;
+        if (!audioDataUri) {
+          throw new Error("Could not read audio file.");
+        }
+        toast({ title: 'Transcribing Audio...', description: 'Processing your uploaded audio file.' });
+        const result: TranscribeUploadedAudioOutput = await handleTranscribeUploadedAudio({ audioDataUri });
+        setTranscription(result.transcription);
+        setShowAudioUpload(false); // Hide upload form on success
+        setUploadedAudioFile(null); // Clear stored file
+        if (audioInputRef.current) audioInputRef.current.value = ''; // Clear file input visually
+        toast({ title: 'Audio Transcription Successful', description: 'Transcription from uploaded file is ready.' });
+      } catch (error: any) {
+        console.error("Uploaded audio transcription error:", error);
+        const message = error.message || 'Failed to transcribe uploaded audio.';
+        setErrorMessages(prev => ({ ...prev, transcribeAudio: message }));
+        toast({ variant: 'destructive', title: 'Audio Transcription Failed', description: message });
+        setTranscription(null); // Ensure transcription is null on failure
+      } finally {
+        setLoadingStates(prev => ({ ...prev, transcribeAudio: false }));
+      }
+    };
+    reader.onerror = () => {
+      console.error("File reading error");
+      setErrorMessages(prev => ({...prev, transcribeAudio: "Error reading the audio file."}));
+      toast({ variant: 'destructive', title: 'File Read Error', description: "Could not read the selected audio file." });
+      setLoadingStates(prev => ({ ...prev, transcribeAudio: false }));
+    };
+  };
+
 
   const runHighlightAnalysis = async () => {
     if (!transcription) return;
     setLoadingStates(prev => ({ ...prev, analysis: true }));
     setErrorMessages(prev => ({ ...prev, analysis: null }));
-    setAnalyzedTranscriptionOutput(null); // Clear previous analysis
+    setAnalyzedTranscriptionOutput(null); 
 
     try {
       toast({ title: 'Analyzing Transcription...', description: 'Identifying key insights for highlighting.' });
@@ -144,7 +237,6 @@ export default function ActionableInsightsPage() {
       console.error("Transcription analysis error:", analysisError);
       const message = analysisError.message || 'Failed to analyze transcription.';
       setErrorMessages(prev => ({ ...prev, analysis: message }));
-      // Fallback to showing raw transcription if analysis fails
       setAnalyzedTranscriptionOutput({ segments: [{ text: transcription, highlight: false }] });
       toast({ variant: 'destructive', title: 'Analysis Failed', description: `${message} Displaying raw transcription.` });
     } finally {
@@ -205,24 +297,66 @@ export default function ActionableInsightsPage() {
   };
 
   const currentTranscriptionText = analyzedTranscriptionOutput?.segments.map(s => s.text).join('') || transcription;
+  const canShowInsights = transcription && !transcription.startsWith("Error during") && !loadingStates.transcribeVideo && !loadingStates.transcribeAudio;
 
   return (
     <div className="flex flex-col items-center min-h-screen py-6 sm:py-10 px-4 bg-background text-foreground">
       <AppHeader />
       <main className="w-full max-w-3xl mt-8 space-y-6">
-        <YoutubeUrlForm onSubmit={processVideo} isLoading={loadingStates.transcribe} initialUrl={youtubeUrl}/>
+        <YoutubeUrlForm onSubmit={processVideo} isLoading={loadingStates.transcribeVideo} initialUrl={youtubeUrl}/>
 
-        {errorMessages.transcribe && (
+        {errorMessages.transcribeVideo && !transcription && ( // Only show initial URL error if no transcription succeeded yet
           <Alert variant="destructive" className="shadow-md">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Transcription Error</AlertTitle>
-            <AlertDescription>{errorMessages.transcribe}</AlertDescription>
+            <AlertTitle>Video Processing Error</AlertTitle>
+            <AlertDescription>{errorMessages.transcribeVideo}</AlertDescription>
           </Alert>
         )}
+        
+        {loadingStates.transcribeVideo && <Card className="shadow-md"><CardContent className="p-6"><LoadingSpinner message="Processing YouTube URL..." /></CardContent></Card>}
 
-        {loadingStates.transcribe && <Card className="shadow-md"><CardContent className="p-6"><LoadingSpinner message="Transcribing video..." /></CardContent></Card>}
+        {showAudioUpload && !transcription && !loadingStates.transcribeVideo && (
+          <Card className="shadow-lg">
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <UploadCloud className="mr-2 h-6 w-6 text-primary" />
+                Upload Audio File
+              </CardTitle>
+              <CardDescription>
+                No transcript could be retrieved from the YouTube URL. Please upload an audio file (e.g., MP3, WAV, M4A) to generate a transcription.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Input 
+                type="file" 
+                accept="audio/*" 
+                onChange={handleFileChange} 
+                ref={audioInputRef}
+                className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+              />
+              {uploadedAudioFile && <p className="text-sm text-muted-foreground">Selected file: {uploadedAudioFile.name}</p>}
+              <Button 
+                onClick={transcribeUploadedFile} 
+                disabled={!uploadedAudioFile || loadingStates.transcribeAudio}
+                className="w-full"
+              >
+                {loadingStates.transcribeAudio ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileAudio className="mr-2 h-4 w-4" />}
+                Transcribe Uploaded Audio
+              </Button>
+              {errorMessages.transcribeAudio && (
+                <Alert variant="destructive" className="mt-2">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Audio Transcription Error</AlertTitle>
+                  <AlertDescription>{errorMessages.transcribeAudio}</AlertDescription>
+                </Alert>
+              )}
+              {loadingStates.transcribeAudio && <LoadingSpinner message="Transcribing audio file..." />}
+            </CardContent>
+          </Card>
+        )}
 
-        {transcription && !loadingStates.transcribe && (
+
+        {transcription && !loadingStates.transcribeVideo && !loadingStates.transcribeAudio && (
           <Card className="shadow-lg">
             <CardHeader>
               <div className="flex justify-between items-center">
@@ -252,7 +386,7 @@ export default function ActionableInsightsPage() {
               )}
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-72 w-full rounded-md border p-4 bg-muted/30"> {/* Increased height */}
+              <ScrollArea className="h-96 w-full rounded-md border p-4 bg-muted/30"> {/* Increased height */}
                 {loadingStates.analysis && !analyzedTranscriptionOutput ? (
                     <LoadingSpinner message="Analyzing for highlights..." />
                 ) : (
@@ -281,7 +415,7 @@ export default function ActionableInsightsPage() {
           </Card>
         )}
 
-        {transcription && !loadingStates.transcribe && !transcription.startsWith("Error during") && (
+        {canShowInsights && (
           <>
             <Separator className="my-8" />
             <Card className="shadow-lg">
@@ -327,7 +461,7 @@ export default function ActionableInsightsPage() {
                         </div>
                       </CardHeader>
                       <CardContent className="p-3 pt-0">
-                        <ScrollArea className="h-40 w-full rounded-md border p-3 bg-muted/20"> {/* Increased height */}
+                        <ScrollArea className="h-60 w-full rounded-md border p-3 bg-muted/20"> {/* Increased height */}
                           <p className="text-sm whitespace-pre-wrap break-words">{summary}</p>
                         </ScrollArea>
                         <p className="text-xs text-muted-foreground mt-2">Word count: {countWords(summary)}</p>
@@ -373,7 +507,7 @@ export default function ActionableInsightsPage() {
                         </div>
                       </CardHeader>
                       <CardContent className="p-3 pt-0">
-                        <ScrollArea className="h-40 w-full rounded-md border p-3 bg-muted/20"> {/* Increased height */}
+                        <ScrollArea className="h-60 w-full rounded-md border p-3 bg-muted/20"> {/* Increased height */}
                           {actionItems.length > 0 ? (
                             <ul className="list-disc pl-5 space-y-1">
                               {actionItems.map((item, index) => (
@@ -418,7 +552,7 @@ export default function ActionableInsightsPage() {
                         </div>
                       </CardHeader>
                       <CardContent className="p-3 pt-0">
-                        <ScrollArea className="h-60 w-full rounded-md border p-3 bg-muted/20"> {/* Increased height */}
+                        <ScrollArea className="h-80 w-full rounded-md border p-3 bg-muted/20"> {/* Increased height */}
                           <p className="text-sm whitespace-pre-wrap break-words">{actionablePlan}</p>
                         </ScrollArea>
                         <p className="text-xs text-muted-foreground mt-2">Word count: {countWords(actionablePlan)}</p>

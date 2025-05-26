@@ -7,3 +7,5 @@ import '@/ai/flows/transcribe-youtube-video.ts';
 import '@/ai/flows/extract-actionable-items.ts';
 import '@/ai/flows/generate-video-summary.ts';
 import '@/ai/flows/analyze-transcription-flow.ts';
+import '@/ai/flows/transcribe-uploaded-audio-flow.ts';
+
