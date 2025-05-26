@@ -1,7 +1,7 @@
 
 # YT Video to Action
 
-Unlock the potential of video content. Transcribe YouTube videos, analyze transcriptions for key insights, generate summaries, extract actionable items, and create structured plans—all powered by AI.
+**YT Video to Action** is a powerful web application designed to help users unlock the full potential of video content. By leveraging cutting-edge AI, this tool allows you to effortlessly transcribe YouTube videos, analyze these transcriptions to pinpoint key insights and areas of emphasis, generate concise summaries, extract actionable items, and even create structured, goal-oriented plans. Whether you're a student looking to digest lecture material, a professional seeking to distill information from webinars, or anyone wanting to make video content more accessible and actionable, YT Video to Action provides the tools you need to transform passive viewing into active learning and productivity.
 
 ## Table of Contents
 
