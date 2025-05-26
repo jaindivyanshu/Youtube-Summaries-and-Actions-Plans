@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { AppHeader } from '@/components/actionable-insights/AppHeader';
 import { YoutubeUrlForm } from '@/components/actionable-insights/YoutubeUrlForm';
 import { LoadingSpinner } from '@/components/actionable-insights/LoadingSpinner';
@@ -14,6 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import {
   handleTranscribeVideo,
@@ -30,7 +31,7 @@ import type { ConvertToPlanOutput } from '@/ai/flows/convert-to-actionable-plan'
 import type { AnalyzeTranscriptionOutput } from '@/ai/flows/analyze-transcription-flow';
 import type { TranscribeUploadedAudioOutput } from '@/ai/flows/transcribe-uploaded-audio-flow';
 
-import { ClipboardList, FileText, ListChecks, Loader2, ScrollText, AlertCircle, Sparkles, UploadCloud, FileAudio } from 'lucide-react';
+import { ClipboardList, FileText, ListChecks, Loader2, ScrollText, AlertCircle, Sparkles, UploadCloud, FileAudio, Save } from 'lucide-react';
 
 type YoutubeUrlFormValues = { youtubeUrl: string };
 
@@ -52,17 +53,18 @@ interface ErrorMessages {
   actionablePlan: string | null;
 }
 
-// Known messages indicating no transcript was found or AI couldn't process from URL
 const NO_TRANSCRIPT_PATTERNS = [
   /Transcription not available for video id:/i,
   /Automated transcription for video ID \w+ is not yet implemented/i,
   /AI speech-to-text transcription failed/i,
   /Audio for video \w+ could not be downloaded/i,
-  /No pre-existing transcript found/i, // from transcribe-youtube-video if getTranscript is null & AI download fails
-  /Error: No pre-existing transcript found/i, // If getTranscript returns null and downloadAudioFromYouTube also returns null
-  /^Error:/i, // Generic error from handleTranscribeVideo
-  /^$/, // Empty string
+  /No pre-existing transcript found/i, 
+  /Error: No pre-existing transcript found/i, 
+  /^Error:/i, 
+  /^$/, 
 ];
+
+const GOOGLE_API_KEY_STORAGE_KEY = 'actionableInsights_googleApiKey';
 
 export default function ActionableInsightsPage() {
   const [youtubeUrl, setYoutubeUrl] = useState<string>('');
@@ -79,6 +81,8 @@ export default function ActionableInsightsPage() {
   const [uploadedAudioFile, setUploadedAudioFile] = useState<File | null>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
 
+  const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
+  const [googleApiKeyInput, setGoogleApiKeyInput] = useState('');
 
   const [loadingStates, setLoadingStates] = useState<LoadingStates>({
     transcribeVideo: false,
@@ -100,6 +104,26 @@ export default function ActionableInsightsPage() {
 
   const { toast } = useToast();
 
+  useEffect(() => {
+    // Load API key from localStorage on mount
+    const storedApiKey = localStorage.getItem(GOOGLE_API_KEY_STORAGE_KEY);
+    if (storedApiKey) {
+      setGoogleApiKeyInput(storedApiKey);
+    }
+  }, []);
+
+  const handleSaveApiKey = () => {
+    localStorage.setItem(GOOGLE_API_KEY_STORAGE_KEY, googleApiKeyInput);
+    toast({ title: 'API Key Saved', description: 'Your Google AI API Key has been saved in browser storage.' });
+    setIsSettingsDialogOpen(false);
+  };
+  
+  const handleClearApiKey = () => {
+    localStorage.removeItem(GOOGLE_API_KEY_STORAGE_KEY);
+    setGoogleApiKeyInput('');
+    toast({ title: 'API Key Cleared', description: 'Your Google AI API Key has been cleared from browser storage.' });
+  };
+
   const countWords = (text: string | null): number => {
     if (!text) return 0;
     return text.trim().split(/\s+/).filter(Boolean).length;
@@ -110,7 +134,7 @@ export default function ActionableInsightsPage() {
       setTranscription(null);
       setYoutubeUrl('');
       if (audioInputRef.current) {
-        audioInputRef.current.value = ''; // Clear file input
+        audioInputRef.current.value = ''; 
       }
     }
     setAnalyzedTranscriptionOutput(null);
@@ -135,11 +159,10 @@ export default function ActionableInsightsPage() {
 
     try {
       const transcribeResult: TranscribeYouTubeVideoOutput = await handleTranscribeVideo({ youtubeUrl: data.youtubeUrl });
-      
       const isNoTranscript = !transcribeResult.transcription || NO_TRANSCRIPT_PATTERNS.some(pattern => pattern.test(transcribeResult.transcription || ''));
 
       if (isNoTranscript) {
-        setTranscription(null); // Clear any placeholder/error message
+        setTranscription(null); 
         setShowAudioUpload(true);
         setErrorMessages(prev => ({ ...prev, transcribeVideo: transcribeResult.transcription || "No transcript found or error during processing. Try uploading an audio file." }));
         toast({
@@ -154,13 +177,13 @@ export default function ActionableInsightsPage() {
         toast({ title: 'Transcription Successful', description: 'Transcription ready from YouTube URL.' });
       }
 
-    } catch (error: any) { // This catch is more for network/unexpected errors from handleTranscribeVideo itself
+    } catch (error: any) { 
       console.error("processVideo (URL) error:", error);
       const message = error.message || 'Failed to process video for transcription.';
       setErrorMessages(prev => ({ ...prev, transcribeVideo: message }));
       toast({ variant: 'destructive', title: 'Video Processing Failed', description: message });
-      setTranscription(null); // Ensure transcription is null on hard failure
-      setShowAudioUpload(true); // Offer upload as fallback
+      setTranscription(null); 
+      setShowAudioUpload(true); 
     } finally {
       setLoadingStates(prev => ({ ...prev, transcribeVideo: false }));
     }
@@ -169,8 +192,6 @@ export default function ActionableInsightsPage() {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Basic validation for audio type could be added here if desired
-      // e.g. if (!file.type.startsWith('audio/')) { ... }
       setUploadedAudioFile(file);
       setErrorMessages(prev => ({ ...prev, transcribeAudio: null }));
     } else {
@@ -185,8 +206,8 @@ export default function ActionableInsightsPage() {
     }
     setLoadingStates(prev => ({ ...prev, transcribeAudio: true }));
     setErrorMessages(prev => ({ ...prev, transcribeAudio: null }));
-    setTranscription(null); // Clear any previous transcription
-    setAnalyzedTranscriptionOutput(null); // Clear previous analysis
+    setTranscription(null); 
+    setAnalyzedTranscriptionOutput(null); 
 
     const reader = new FileReader();
     reader.readAsDataURL(uploadedAudioFile);
@@ -199,16 +220,16 @@ export default function ActionableInsightsPage() {
         toast({ title: 'Transcribing Audio...', description: 'Processing your uploaded audio file.' });
         const result: TranscribeUploadedAudioOutput = await handleTranscribeUploadedAudio({ audioDataUri });
         setTranscription(result.transcription);
-        setShowAudioUpload(false); // Hide upload form on success
-        setUploadedAudioFile(null); // Clear stored file
-        if (audioInputRef.current) audioInputRef.current.value = ''; // Clear file input visually
+        setShowAudioUpload(false); 
+        setUploadedAudioFile(null); 
+        if (audioInputRef.current) audioInputRef.current.value = ''; 
         toast({ title: 'Audio Transcription Successful', description: 'Transcription from uploaded file is ready.' });
       } catch (error: any) {
         console.error("Uploaded audio transcription error:", error);
         const message = error.message || 'Failed to transcribe uploaded audio.';
         setErrorMessages(prev => ({ ...prev, transcribeAudio: message }));
         toast({ variant: 'destructive', title: 'Audio Transcription Failed', description: message });
-        setTranscription(null); // Ensure transcription is null on failure
+        setTranscription(null); 
       } finally {
         setLoadingStates(prev => ({ ...prev, transcribeAudio: false }));
       }
@@ -220,7 +241,6 @@ export default function ActionableInsightsPage() {
       setLoadingStates(prev => ({ ...prev, transcribeAudio: false }));
     };
   };
-
 
   const runHighlightAnalysis = async () => {
     if (!transcription) return;
@@ -243,7 +263,6 @@ export default function ActionableInsightsPage() {
       setLoadingStates(prev => ({ ...prev, analysis: false }));
     }
   };
-
 
   const generateSummary = async () => {
     if (!transcription) return;
@@ -301,11 +320,55 @@ export default function ActionableInsightsPage() {
 
   return (
     <div className="flex flex-col items-center min-h-screen py-6 sm:py-10 px-4 bg-background text-foreground">
-      <AppHeader />
+      <AppHeader onSettingsClick={() => setIsSettingsDialogOpen(true)} />
+
+      <Dialog open={isSettingsDialogOpen} onOpenChange={setIsSettingsDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>API Key Settings</DialogTitle>
+            <DialogDescription>
+              Manage your Google AI API Key. This key is stored locally in your browser.
+              <br />
+              <span className="text-xs text-destructive/80">
+                Note: For production, API keys should be managed server-side.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="googleApiKey">Google AI API Key</Label>
+              <Input
+                id="googleApiKey"
+                type="password"
+                placeholder="Enter your API key"
+                value={googleApiKeyInput}
+                onChange={(e) => setGoogleApiKeyInput(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter className="sm:justify-between">
+             <Button type="button" variant="outline" onClick={handleClearApiKey}>
+                Clear Key
+              </Button>
+            <div className="flex gap-2">
+             <DialogClose asChild>
+                <Button type="button" variant="secondary">
+                  Close
+                </Button>
+              </DialogClose>
+              <Button type="button" onClick={handleSaveApiKey}>
+                <Save className="mr-2 h-4 w-4" />
+                Save Key
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <main className="w-full max-w-3xl mt-8 space-y-6">
         <YoutubeUrlForm onSubmit={processVideo} isLoading={loadingStates.transcribeVideo} initialUrl={youtubeUrl}/>
 
-        {errorMessages.transcribeVideo && !transcription && ( // Only show initial URL error if no transcription succeeded yet
+        {errorMessages.transcribeVideo && !transcription && (
           <Alert variant="destructive" className="shadow-md">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Video Processing Error</AlertTitle>
@@ -355,7 +418,6 @@ export default function ActionableInsightsPage() {
           </Card>
         )}
 
-
         {transcription && !loadingStates.transcribeVideo && !loadingStates.transcribeAudio && (
           <Card className="shadow-lg">
             <CardHeader>
@@ -386,7 +448,7 @@ export default function ActionableInsightsPage() {
               )}
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-96 w-full rounded-md border p-4 bg-muted/30"> {/* Increased height */}
+              <ScrollArea className="h-96 w-full rounded-md border p-4 bg-muted/30">
                 {loadingStates.analysis && !analyzedTranscriptionOutput ? (
                     <LoadingSpinner message="Analyzing for highlights..." />
                 ) : (
@@ -424,7 +486,6 @@ export default function ActionableInsightsPage() {
                   <CardDescription>Use the transcription to generate summaries, action items, or a detailed plan. Add custom instructions for more tailored results.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Summary Generation */}
                 <div>
                   <div className="flex justify-between items-center mb-2">
                     <Label htmlFor="summaryInstruction" className="flex items-center text-base font-medium">
@@ -461,7 +522,7 @@ export default function ActionableInsightsPage() {
                         </div>
                       </CardHeader>
                       <CardContent className="p-3 pt-0">
-                        <ScrollArea className="h-60 w-full rounded-md border p-3 bg-muted/20"> {/* Increased height */}
+                        <ScrollArea className="h-60 w-full rounded-md border p-3 bg-muted/20">
                           <p className="text-sm whitespace-pre-wrap break-words">{summary}</p>
                         </ScrollArea>
                         <p className="text-xs text-muted-foreground mt-2">Word count: {countWords(summary)}</p>
@@ -470,7 +531,6 @@ export default function ActionableInsightsPage() {
                   )}
                 </div>
                 <Separator />
-                {/* Action Items Extraction */}
                 <div>
                   <div className="flex justify-between items-center mb-2">
                      <Label htmlFor="actionItemsInstruction" className="flex items-center text-base font-medium">
@@ -507,7 +567,7 @@ export default function ActionableInsightsPage() {
                         </div>
                       </CardHeader>
                       <CardContent className="p-3 pt-0">
-                        <ScrollArea className="h-60 w-full rounded-md border p-3 bg-muted/20"> {/* Increased height */}
+                        <ScrollArea className="h-60 w-full rounded-md border p-3 bg-muted/20">
                           {actionItems.length > 0 ? (
                             <ul className="list-disc pl-5 space-y-1">
                               {actionItems.map((item, index) => (
@@ -523,7 +583,6 @@ export default function ActionableInsightsPage() {
                   )}
                 </div>
                 <Separator />
-                {/* Actionable Plan Creation */}
                 <div>
                   <div className="flex justify-between items-center">
                      <Label className="flex items-center text-base font-medium">
@@ -552,7 +611,7 @@ export default function ActionableInsightsPage() {
                         </div>
                       </CardHeader>
                       <CardContent className="p-3 pt-0">
-                        <ScrollArea className="h-80 w-full rounded-md border p-3 bg-muted/20"> {/* Increased height */}
+                        <ScrollArea className="h-80 w-full rounded-md border p-3 bg-muted/20">
                           <p className="text-sm whitespace-pre-wrap break-words">{actionablePlan}</p>
                         </ScrollArea>
                         <p className="text-xs text-muted-foreground mt-2">Word count: {countWords(actionablePlan)}</p>
