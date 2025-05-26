@@ -4,6 +4,7 @@
  *
  * - getVideoId - Extracts the YouTube video ID from a URL.
  * - getTranscript - Fetches a video transcript using the youtube-transcript library.
+ * - downloadAudioFromYouTube - Placeholder for downloading audio from a YouTube video.
  */
 
 import { YoutubeTranscript, type TranscriptResponse } from 'youtube-transcript';
@@ -53,9 +54,58 @@ export async function getTranscript(videoId: string): Promise<string | null> {
   } catch (error: any) {
     // The youtube-transcript library typically throws an error if no transcript is found
     // or if the video ID is invalid/video does not exist.
-    // Example error messages: "No transcript found for this video_id" or "This video has no subtitled translations."
-    console.warn(`youtube-service: Failed to fetch English transcript for videoId ${videoId}. Error: ${error.message}`);
+    console.warn(`youtube-service: Failed to fetch English transcript for videoId ${videoId}. Error: ${(error as Error).message}`);
     return null; // Indicate transcript not available due to error
   }
 }
 
+/**
+ * Placeholder function for downloading audio from a YouTube video.
+ * In a real implementation, this would use a library like ytdl-core
+ * to download the audio and return it as a data URI (e.g., "data:audio/mp3;base64,...").
+ * @param videoId The YouTube video ID.
+ * @returns A promise that resolves to the audio data URI, or null if download fails.
+ */
+export async function downloadAudioFromYouTube(videoId: string): Promise<string | null> {
+  console.warn(`youtube-service: downloadAudioFromYouTube for videoId ${videoId} is a placeholder and did not actually download audio. Returning null.`);
+  //
+  // TODO: Implement actual audio download logic here.
+  // Example using a hypothetical library:
+  //
+  // import ytdl from 'ytdl-core';
+  // import { PassThrough } from 'stream';
+  //
+  // try {
+  //   if (!ytdl.validateID(videoId)) {
+  //     console.error(`youtube-service: Invalid videoId for audio download: ${videoId}`);
+  //     return null;
+  //   }
+  //   const info = await ytdl.getInfo(videoId);
+  //   const audioFormat = ytdl.chooseFormat(info.formats, { quality: 'highestaudio', filter: 'audioonly' });
+  //   if (!audioFormat) {
+  //     console.error(`youtube-service: No suitable audio format found for videoId: ${videoId}`);
+  //     return null;
+  //   }
+  //
+  //   const audioStream = ytdl(videoId, { format: audioFormat });
+  //   const chunks: Buffer[] = [];
+  //
+  //   return new Promise((resolve, reject) => {
+  //     audioStream.on('data', (chunk) => chunks.push(chunk));
+  //     audioStream.on('end', () => {
+  //       const audioBuffer = Buffer.concat(chunks);
+  //       const mimeType = audioFormat.mimeType?.split(';')[0] || 'audio/mp3'; // Determine MIME type
+  //       const audioDataUri = `data:${mimeType};base64,${audioBuffer.toString('base64')}`;
+  //       resolve(audioDataUri);
+  //     });
+  //     audioStream.on('error', (err) => {
+  //       console.error(`youtube-service: Error downloading audio for videoId ${videoId}:`, err);
+  //       reject(null);
+  //     });
+  //   });
+  // } catch (error) {
+  //   console.error(`youtube-service: Exception during audio download for videoId ${videoId}:`, error);
+  //   return null;
+  // }
+  return null; // Placeholder returns null
+}

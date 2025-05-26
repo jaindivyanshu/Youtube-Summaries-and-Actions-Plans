@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -10,7 +11,7 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import {getTranscript, getVideoId} from '@/services/youtube-service';
+import {getTranscript, getVideoId, downloadAudioFromYouTube} from '@/services/youtube-service';
 
 const TranscribeYouTubeVideoInputSchema = z.object({
   youtubeUrl: z.string().describe('The URL of the YouTube video to transcribe.'),
@@ -43,40 +44,53 @@ const transcribeYouTubeVideoFlow = ai.defineFlow(
     let transcription = await getTranscript(videoId);
 
     if (!transcription) {
-      // If a pre-existing transcript isn't found, the next step would be to download audio
-      // and perform AI speech-to-text.
-      //
-      // TODO: Implement YouTube audio download and pass to an AI model for transcription.
-      // This would involve:
-      // 1. A service to download audio from the YouTube URL (e.g., using ytdl-core or similar).
-      //    This service would need to provide the audio data, perhaps as a data URI.
-      //    Example: const audioDataUri = await downloadAudioFromYouTube(videoId);
-      //
-      // 2. Calling an AI model via Genkit capable of audio transcription.
-      //    Example (assuming audioDataUri is available and includes MIME type like 'data:audio/mp3;base64,...'):
-      //
-      //    if (audioDataUri) {
-      //      try {
-      //        const {text} = await ai.generate({
-      //          model: 'googleai/gemini-1.5-flash', // Ensure this model supports audio input
-      //          prompt: [
-      //            {media: {url: audioDataUri}}, // Pass audio data
-      //            {text: 'Transcribe the audio from this video accurately.'}
-      //          ],
-      //        });
-      //        transcription = text;
-      //      } catch (error) {
-      //        console.error("AI transcription error:", error);
-      //        transcription = `AI speech-to-text transcription failed for video ${videoId}. Error: ${(error as Error).message}`;
-      //      }
-      //    } else {
-      //        transcription = `Audio for video ${videoId} could not be downloaded for AI transcription.`;
-      //    }
-      //
-      // For now, as audio download and direct AI STT are not implemented in this step,
-      // we return a message indicating this.
-      console.warn(`AI speech-to-text for video ${videoId} skipped: YouTube audio download and AI transcription pipeline not yet implemented in this flow.`);
-      transcription = `Automated transcription for video ID ${videoId} is not yet implemented. This feature requires downloading audio from YouTube and processing it with an AI speech-to-text model.`;
+      console.warn(`No pre-existing transcript found for video ${videoId}. Attempting AI transcription.`);
+      // Attempt to download audio and use AI for transcription
+      const audioDataUri = await downloadAudioFromYouTube(videoId);
+
+      if (audioDataUri) {
+        try {
+          // Use a model that supports audio input, like gemini-1.5-flash.
+          // The default model in genkit.ts (gemini-2.0-flash) might not be suitable for audio.
+          const {text} = await ai.generate({
+            model: 'googleai/gemini-1.5-flash', // Explicitly use a model supporting audio
+            prompt: [
+              {media: {url: audioDataUri}}, // Pass audio data as a data URI
+              {text: 'Transcribe the audio from this video accurately. Provide only the transcribed text.'}
+            ],
+             config: { // It's good practice to include safety settings
+                safetySettings: [
+                    {
+                        category: 'HARM_CATEGORY_HARASSMENT',
+                        threshold: 'BLOCK_MEDIUM_AND_ABOVE',
+                    },
+                    {
+                        category: 'HARM_CATEGORY_HATE_SPEECH',
+                        threshold: 'BLOCK_MEDIUM_AND_ABOVE',
+                    },
+                    {
+                        category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+                        threshold: 'BLOCK_MEDIUM_AND_ABOVE',
+                    },
+                    {
+                        category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+                        threshold: 'BLOCK_MEDIUM_AND_ABOVE',
+                    },
+                ],
+            },
+          });
+          transcription = text;
+          if (!transcription) {
+            transcription = `AI speech-to-text for video ${videoId} resulted in an empty transcript.`;
+          }
+        } catch (error) {
+          console.error(`AI transcription error for video ${videoId}:`, error);
+          transcription = `AI speech-to-text transcription failed for video ${videoId}. Error: ${(error as Error).message}`;
+        }
+      } else {
+        // This message will be shown because downloadAudioFromYouTube is a placeholder
+        transcription = `Audio for video ${videoId} could not be downloaded for AI transcription. Manual audio download and AI processing would be required.`;
+      }
     }
 
     return {transcription};
