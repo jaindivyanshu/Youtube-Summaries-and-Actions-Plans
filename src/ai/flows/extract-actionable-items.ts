@@ -14,6 +14,7 @@ import {z} from 'genkit';
 
 const ExtractActionableItemsInputSchema = z.object({
   transcription: z.string().describe('The transcription of the video.'),
+  customInstruction: z.string().optional().describe('Optional custom instruction for extracting action items.'),
 });
 
 export type ExtractActionableItemsInput = z.infer<
@@ -42,11 +43,15 @@ const extractActionableItemsPrompt = ai.definePrompt({
   output: {schema: ExtractActionableItemsOutputSchema},
   prompt: `You are an AI expert in extracting actionable items from text.
 
-  Given the following video transcription, extract a list of actionable items. Actionable items should be specific and directly derived from the transcription.
+Given the following video transcription, extract a list of actionable items. Actionable items should be specific and directly derived from the transcription.
+{{#if customInstruction}}
+Follow this specific instruction when extracting items: {{{customInstruction}}}
+{{/if}}
 
-  Transcription: {{{transcription}}}
+Transcription:
+{{{transcription}}}
 
-  Actionable Items:`,
+Actionable Items:`,
 });
 
 const extractActionableItemsFlow = ai.defineFlow(

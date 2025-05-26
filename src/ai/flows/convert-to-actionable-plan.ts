@@ -21,7 +21,7 @@ export type ConvertToPlanInput = z.infer<typeof ConvertToPlanInputSchema>;
 const ConvertToPlanOutputSchema = z.object({
   actionablePlan: z
     .string()
-    .describe('A structured, actionable plan derived from the video transcription.'),
+    .describe('A structured, actionable plan derived from the video transcription, including practical tips and a SMART goal if possible.'),
 });
 export type ConvertToPlanOutput = z.infer<typeof ConvertToPlanOutputSchema>;
 
@@ -35,9 +35,13 @@ const prompt = ai.definePrompt({
   output: {schema: ConvertToPlanOutputSchema},
   prompt: `You are an expert in creating actionable plans from transcriptions.
 
-  Convert the following video transcription into a structured, actionable plan with prioritized steps. Be clear and concise.
+Convert the following video transcription into a structured, actionable plan with prioritized steps.
+The plan should be clear, concise, and easy to follow.
+- Include practical tips for implementing each step of the plan.
+- If possible, frame the overall plan around a SMART goal (Specific, Measurable, Achievable, Relevant, Time-bound) derived from the transcription content, or help define one. If a clear SMART goal isn't directly evident, suggest how the user might formulate one based on the video's key takeaways.
 
-  Transcription: {{{transcription}}}`,
+Transcription:
+{{{transcription}}}`,
 });
 
 const convertToPlanFlow = ai.defineFlow(

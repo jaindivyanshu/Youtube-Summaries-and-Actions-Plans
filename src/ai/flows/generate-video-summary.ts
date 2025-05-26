@@ -12,6 +12,7 @@ import {z} from 'genkit';
 
 const GenerateVideoSummaryInputSchema = z.object({
   transcript: z.string().describe('The transcript of the video.'),
+  customInstruction: z.string().optional().describe('Optional custom instruction for the summarization process.'),
 });
 export type GenerateVideoSummaryInput = z.infer<typeof GenerateVideoSummaryInputSchema>;
 
@@ -28,7 +29,13 @@ const prompt = ai.definePrompt({
   name: 'generateVideoSummaryPrompt',
   input: {schema: GenerateVideoSummaryInputSchema},
   output: {schema: GenerateVideoSummaryOutputSchema},
-  prompt: `You are an expert summarizer.  Please summarize the following video transcript in a concise manner:\n\nTranscript: {{{transcript}}}`,
+  prompt: `You are an expert summarizer. Please summarize the following video transcript in a concise manner.
+{{#if customInstruction}}
+Additionally, follow this specific instruction: {{{customInstruction}}}
+{{/if}}
+
+Transcript:
+{{{transcript}}}`,
 });
 
 const generateVideoSummaryFlow = ai.defineFlow(

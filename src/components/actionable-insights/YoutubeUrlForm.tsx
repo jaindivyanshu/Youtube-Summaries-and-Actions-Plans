@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -21,15 +22,20 @@ type YoutubeUrlFormValues = z.infer<typeof formSchema>;
 interface YoutubeUrlFormProps {
   onSubmit: (data: YoutubeUrlFormValues) => Promise<void>;
   isLoading: boolean;
+  initialUrl?: string;
 }
 
-export function YoutubeUrlForm({ onSubmit, isLoading }: YoutubeUrlFormProps) {
+export function YoutubeUrlForm({ onSubmit, isLoading, initialUrl = '' }: YoutubeUrlFormProps) {
   const form = useForm<YoutubeUrlFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      youtubeUrl: '',
+      youtubeUrl: initialUrl,
     },
   });
+
+  useEffect(() => {
+    form.setValue('youtubeUrl', initialUrl);
+  }, [initialUrl, form]);
 
   return (
     <Card className="shadow-lg">
@@ -69,7 +75,7 @@ export function YoutubeUrlForm({ onSubmit, isLoading }: YoutubeUrlFormProps) {
               ) : (
                 <Youtube className="mr-2 h-5 w-5" />
               )}
-              Process Video
+              {isLoading ? 'Processing...' : 'Process Video'}
             </Button>
           </form>
         </Form>

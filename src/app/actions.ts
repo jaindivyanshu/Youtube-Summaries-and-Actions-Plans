@@ -67,20 +67,12 @@ export async function handleAnalyzeTranscription(input: AnalyzeTranscriptionInpu
   try {
     const result = await analyzeTranscription(input);
     if (!result || !Array.isArray(result.segments)) {
-      // Even if segments is empty, it should be an array.
-      // If the transcription was empty, the flow returns { segments: [] }
-      // If there was an error or empty output from LLM, it returns { segments: [{text: original, highlight: false}]}
-      // So, if result.segments is not an array, it's an unexpected state.
       throw new Error('Invalid analyzed transcription data received.');
     }
     return result;
   } catch (error) {
     console.error('Error in handleAnalyzeTranscription:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred during transcription analysis.';
-    // Fallback to returning the original transcription as a single, non-highlighted segment
-    // This ensures the page doesn't break if analysis fails.
     return { segments: [{ text: input.transcription, highlight: false }] };
-    // Or, rethrow if we want the error to propagate to the UI more directly:
-    // throw new Error(`Failed to analyze transcription: ${errorMessage}`);
   }
 }
