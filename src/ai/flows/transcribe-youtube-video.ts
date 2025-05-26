@@ -43,56 +43,56 @@ const transcribeYouTubeVideoFlow = ai.defineFlow(
 
     let transcription = await getTranscript(videoId);
 
-    if (!transcription) {
-      console.warn(`No pre-existing transcript found for video ${videoId}. Attempting AI transcription.`);
-      // Attempt to download audio and use AI for transcription
+    if (transcription) {
+      console.log(`Found pre-existing transcript for video ${videoId}.`);
+    } else {
+      console.warn(`No pre-existing transcript found for video ${videoId}. Attempting AI transcription from downloaded audio.`);
+      
       const audioDataUri = await downloadAudioFromYouTube(videoId);
 
       if (audioDataUri) {
+        console.log(`Audio downloaded for video ${videoId}. Proceeding with AI transcription.`);
         try {
-          // Use a model that supports audio input, like gemini-1.5-flash.
-          // The default model in genkit.ts (gemini-2.0-flash) might not be suitable for audio.
           const {text} = await ai.generate({
-            model: 'googleai/gemini-1.5-flash', // Explicitly use a model supporting audio
+            model: 'googleai/gemini-1.5-flash', 
             prompt: [
-              {media: {url: audioDataUri}}, // Pass audio data as a data URI
+              {media: {url: audioDataUri}}, 
               {text: 'Transcribe the audio from this video accurately. Provide only the transcribed text.'}
             ],
-             config: { // It's good practice to include safety settings
+             config: { 
                 safetySettings: [
-                    {
-                        category: 'HARM_CATEGORY_HARASSMENT',
-                        threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-                    },
-                    {
-                        category: 'HARM_CATEGORY_HATE_SPEECH',
-                        threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-                    },
-                    {
-                        category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-                        threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-                    },
-                    {
-                        category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-                        threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-                    },
+                    { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+                    { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+                    { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+                    { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
                 ],
             },
           });
-          transcription = text;
-          if (!transcription) {
-            transcription = `AI speech-to-text for video ${videoId} resulted in an empty transcript.`;
+
+          transcription = text; // text can be null if generation fails or is blocked
+          if (transcription === null || transcription === undefined || transcription.trim() === '') {
+            console.warn(`AI speech-to-text for video ${videoId} resulted in an empty or null transcript.`);
+            transcription = `AI speech-to-text for video ${videoId} resulted in an empty transcript. The audio might be silent or unclear.`;
+          } else {
+            console.log(`AI transcription successful for video ${videoId}.`);
           }
         } catch (error) {
           console.error(`AI transcription error for video ${videoId}:`, error);
           transcription = `AI speech-to-text transcription failed for video ${videoId}. Error: ${(error as Error).message}`;
         }
       } else {
-        // This message will be shown because downloadAudioFromYouTube is a placeholder
-        transcription = `Audio for video ${videoId} could not be downloaded for AI transcription. Manual audio download and AI processing would be required.`;
+        console.warn(`Audio for video ${videoId} could not be downloaded. Cannot perform AI transcription.`);
+        transcription = `No pre-existing transcript found, and audio for video ${videoId} could not be downloaded for AI transcription.`;
       }
     }
 
+    if (transcription === null || transcription === undefined) {
+      // This case should ideally be handled by the specific messages above
+      // but as a fallback to ensure a string is always returned.
+      console.error(`Transcription for video ${videoId} is unexpectedly null/undefined at the end of the flow.`);
+      transcription = "An unexpected error occurred, and no transcription could be obtained."
+    }
+    
     return {transcription};
   }
 );
